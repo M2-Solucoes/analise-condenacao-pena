@@ -1,0 +1,11 @@
+{
+  "name": "analise-condenacao-pena",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Skill do Claude: análise de condenações (PAs de sentença e acórdão) do eLaw do Pena Carvalho, carteira Vivo",
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "puppeteer-core": "24.10.2"
+  }
+}
