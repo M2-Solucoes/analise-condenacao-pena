@@ -22,7 +22,20 @@
 //     A aba "Partes e Advogados" não tem advogado.
 import { ELAW, espera, SessaoCaiu, garantirLogado } from './sessao.mjs';
 
-export const RELATORIO = { id: 62640, modelo: 27668, url: 'https://relatorios.elawio.com.br/reporting/reports/run/62640/27668' };
+// Relatórios do módulo (pasta PA), modelo padrão de cada um. Filtros achados pelo TÍTULO do cartão (as posições
+// mudam de um relatório para outro).
+export const RELATORIOS = {
+  // a planilha enviada à empresa: 19 colunas, filtro de período = Período de Preenchimento
+  condenacoes: { nome: 'Análise de Condenações', url: 'https://relatorios.elawio.com.br/reporting/reports/run/62640/27668', periodo: /Per[ií]odo de Preenchimento/i },
+  // PAs na etapa de dispensa recursal: ID da PA, Status PA, Resultado, processo, NPC… (13 colunas, 2026-11-11)
+  // O modelo padrão (1828) falha ao exportar desde pelo menos 11/11/2026: "A query não retornou a coluna configurada
+  // 'AdvogadoAdverso'" (coluna "Advogado da Outra Parte"). A cópia global (26637) não tem essa coluna e exporta.
+  analiseRecurso: {
+    nome: "PA'S- Análise de Recurso", relatorioId: 50983, periodo: /per[ií]odo de Cadastro/i,
+    modelos: [{ id: 1828, nome: "PA'S- Análise de Recurso" }, { id: 26637, nome: "Cópia - PA'S- Análise de Recurso" }],
+  },
+};
+export const RELATORIO = RELATORIOS.condenacoes;
 
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
 export const soDigitos = (s) => String(s ?? '').replace(/\D/g, '');
@@ -32,9 +45,18 @@ async function checarPaginaEstaLogada(page) {
 }
 
 // ---------------------------------------------------------------- relatório
-async function selectsVisiveis(page) {
+// mat-selects visíveis dentro do cartão de filtro cujo título casa com `titulo` (regex).
+async function selectsDoCartao(page, titulo) {
+  const h = await page.evaluateHandle((src, flags) => {
+    const re = new RegExp(src, flags);
+    const tit = [...document.querySelectorAll('*')].find((e) => e.children.length === 0 && e.offsetParent !== null && re.test(e.textContent.trim()) && !e.closest('mat-chip, .mat-mdc-chip'));
+    let card = tit;
+    while (card && !card.querySelector('mat-select')) card = card.parentElement;
+    return card ? [...card.querySelectorAll('mat-select')].filter((s) => s.offsetParent !== null) : [];
+  }, titulo.source, titulo.flags);
+  const n = await h.evaluate((a) => a.length);
   const out = [];
-  for (const s of await page.$$('mat-select')) if (await s.evaluate((e) => e.offsetParent !== null)) out.push(s);
+  for (let i = 0; i < n; i++) out.push((await h.getProperty(String(i))).asElement());
   return out;
 }
 const opcoesVisiveis = (page) => page.evaluate(() => [...document.querySelectorAll('mat-option')].filter((o) => o.offsetParent !== null).map((o) => ({ t: o.innerText.trim(), sel: o.getAttribute('aria-selected') === 'true' })));
@@ -57,9 +79,10 @@ async function passarAvisoDeNovidades(page) {
   }
 }
 
-// Abre a pré-execução, aplica Célula = Vivo, Vivo ES e Período de Preenchimento = intervalo, exporta o Excel
-// completo (não o Preview, que para em 2.000 linhas) e devolve o arquivo. de/ate: 'dd/mm/aaaa'.
-export async function exportarRelatorio(page, { de, ate, aoProgresso = () => {} }) {
+// Abre a pré-execução do relatório, aplica Célula = Vivo, Vivo ES e (se houver de/ate) o período do relatório
+// como Intervalo, exporta o Excel completo (não o Preview, que para em 2.000 linhas) e devolve o arquivo.
+// rel: RELATORIOS.condenacoes | RELATORIOS.analiseRecurso. de/ate: 'dd/mm/aaaa' ou nulos (sem período).
+export async function exportarRelatorio(page, { rel = RELATORIOS.condenacoes, de = null, ate = null, aoProgresso = () => {} } = {}) {
   await garantirLogado(page);
   await page.waitForSelector('#InfoModuloRelatorio', { timeout: 30_000 });
   await Promise.all([
@@ -67,7 +90,36 @@ export async function exportarRelatorio(page, { de, ate, aoProgresso = () => {} 
     page.evaluate(() => { const f = document.querySelector('#InfoModuloRelatorio'); f.target = '_self'; f.submit(); }),
   ]);
   await checarPaginaEstaLogada(page);
-  await page.goto(RELATORIO.url, { waitUntil: 'networkidle2', timeout: 60_000 });
+  // Modelos candidatos: com `rel.modelos`, acha cada um pelo NOME na API do módulo (o id pode mudar) e tenta
+  // na ordem; se o eLaw recusar a exportação por coluna quebrada do modelo, passa para o próximo.
+  const urls = [];
+  if (rel.modelos) {
+    const vistos = await page.evaluate(async (id) => {
+      const r = await fetch(`/api/v2/reporting/Models?relatorioId=${id}&_lang=pt-BR`, { credentials: 'include' });
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (Array.isArray(j) ? j : j.Items || []).map((m) => ({ id: m.Id, nome: String(m.Name).trim() }));
+    }, rel.relatorioId).catch(() => []);
+    for (const m of rel.modelos) {
+      const id = vistos.find((v) => v.nome === m.nome)?.id ?? m.id;
+      urls.push({ url: `https://relatorios.elawio.com.br/reporting/reports/run/${rel.relatorioId}/${id}`, nome: m.nome });
+    }
+  } else urls.push({ url: rel.url, nome: rel.nome });
+  let ultimoErro;
+  for (const [i, alvo] of urls.entries()) {
+    try {
+      return await exportarModelo(page, { rel, url: alvo.url, de, ate, aoProgresso });
+    } catch (e) {
+      ultimoErro = e;
+      if (e.code === 'SESSAO' || i === urls.length - 1 || !/coluna configurada|n[aã]o retornou a coluna/i.test(e.message)) throw e;
+      aoProgresso(`o modelo "${alvo.nome}" falhou no eLaw (${e.message}); tentando "${urls[i + 1].nome}"`);
+    }
+  }
+  throw ultimoErro;
+}
+
+async function exportarModelo(page, { rel, url, de, ate, aoProgresso }) {
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 });
   await checarPaginaEstaLogada(page);
   await page.waitForNetworkIdle({ idleTime: 800, timeout: 20_000 }).catch(() => {});
   await passarAvisoDeNovidades(page);
@@ -76,32 +128,36 @@ export async function exportarRelatorio(page, { de, ate, aoProgresso = () => {} 
   await page.waitForNetworkIdle({ idleTime: 800, timeout: 20_000 }).catch(() => {});
 
   // Célula
-  let sel = await selectsVisiveis(page);
-  if (sel.length < 6) throw new Error(`a pré-execução do relatório mudou (${sel.length} filtros visíveis, esperados 7)`);
-  await sel[1].click(); await espera(1200);
+  const [selCel] = await selectsDoCartao(page, /^C[ée]lula$/i);
+  if (!selCel) throw new Error(`não achei o filtro de Célula no relatório ${rel.nome}`);
+  await selCel.click(); await espera(1200);
   for (const c of ['Vivo', 'Vivo ES']) {
     const ops = await opcoesVisiveis(page);
     const o = ops.find((x) => x.t === c);
-    if (!o) throw new Error(`a célula "${c}" não aparece no filtro do relatório para este usuário`);
+    if (!o) throw new Error(`a célula "${c}" não aparece no filtro do relatório ${rel.nome} para este usuário`);
     if (!o.sel) { await clicarOpcao(page, c); await espera(400); }
   }
   await page.keyboard.press('Escape'); await espera(800);
 
-  // Período de Preenchimento = Intervalo
-  sel = await selectsVisiveis(page);
-  await sel[4].click(); await espera(1000);
-  if (!(await clicarOpcao(page, 'Intervalo'))) throw new Error('o filtro de período não ofereceu "Intervalo"');
-  await espera(1200);
-  const datas = await preencherIntervalo(page, de, ate);
-  await page.waitForNetworkIdle({ idleTime: 800, timeout: 20_000 }).catch(() => {});
+  // Período (opcional) = Intervalo
+  let datas = [];
+  if (de && ate) {
+    const [selTipo] = await selectsDoCartao(page, rel.periodo);
+    if (!selTipo) throw new Error(`não achei o filtro de período no relatório ${rel.nome}`);
+    await selTipo.click(); await espera(1000);
+    if (!(await clicarOpcao(page, 'Intervalo'))) throw new Error('o filtro de período não ofereceu "Intervalo"');
+    await espera(1200);
+    datas = await preencherIntervalo(page, de, ate);
+    await page.waitForNetworkIdle({ idleTime: 800, timeout: 20_000 }).catch(() => {});
+  }
 
   const resumo = await chips(page);
   const chipCel = resumo.find((t) => t.startsWith('Célula:')) || '';
-  const chipPer = resumo.find((t) => t.startsWith('Período de Preenchimento:')) || '';
+  const chipPer = resumo.find((t) => /per[ií]odo/i.test(t)) || '';
   if (!/Vivo, Vivo ES|Vivo ES, Vivo/.test(chipCel)) throw new Error(`o filtro de célula não ficou como esperado (${chipCel || 'sem resumo'})`);
-  // o resumo precisa mostrar datas; "intervalo" sozinho quer dizer que o período não foi aplicado
-  if (!/\d/.test(chipPer)) throw new Error(`o filtro de período não foi aplicado (${chipPer || 'sem resumo'}; campos: ${datas.join(' a ')})`);
-  aoProgresso(`filtros: ${chipCel} · ${chipPer}`);
+  // com período, o resumo precisa mostrar datas; "intervalo" sozinho quer dizer que o período não foi aplicado
+  if (de && ate && !/\d/.test(chipPer)) throw new Error(`o filtro de período não foi aplicado (${chipPer || 'sem resumo'}; campos: ${datas.join(' a ')})`);
+  aoProgresso(`${rel.nome} · filtros: ${chipCel}${chipPer ? ` · ${chipPer}` : ''}`);
 
   // Exporta: o eLaw processa em segundo plano (RunExports) e entrega o .xlsx (RunSnapshots).
   let arquivo = null; let linhas = null; let falha = null;
@@ -269,12 +325,24 @@ export async function lerPA(page, idPa) {
   if (/Auth\/Login/i.test(page.url())) throw new SessaoCaiu();
   if (/elawio - 500/i.test(await page.title())) throw new Error(`a PA ${idPa} não abriu no eLaw`);
   return await page.evaluate(() => {
+    // Linhas da tabela de detalhe: [rótulo] valor [rótulo] valor — o rótulo é a célula com <strong>, o valor é a
+    // célula seguinte (sem <strong>). (2026-11-11: o seletor antigo também pegava células de valor como rótulo.)
     const campos = {};
-    for (const s of document.querySelectorAll('td strong, td.column-left')) {
-      const td = s.closest('td');
-      const rot = (s.tagName === 'STRONG' ? s : td).textContent.trim();
-      const v = td?.nextElementSibling;
-      if (rot && v && !(rot in campos)) campos[rot] = v.textContent.replace(/\s+/g, ' ').trim();
+    for (const tr of document.querySelectorAll('tr')) {
+      const tds = [...tr.children].filter((c) => c.tagName === 'TD');
+      for (let i = 0; i < tds.length; i++) {
+        const st = tds[i].querySelector('strong');
+        if (!st) continue;
+        const rot = st.textContent.replace(/\s+/g, ' ').trim();
+        const v = tds[i + 1] && !tds[i + 1].querySelector('strong') ? tds[i + 1].textContent.replace(/\s+/g, ' ').trim() : '';
+        if (rot && !(rot in campos)) campos[rot] = v;
+      }
+    }
+    // Histórico da PA: "<dd/mm/aaaa hh:mm> <Campo> atualizado(a) de 'X' para 'Y' pelo usuário(a) …". A sugestão do
+    // escritório (campo interno "Sugestao Dispensa Recursal M T A", herdado do MTA) só aparece aqui no detalhe.
+    const historico = [];
+    for (const m of document.body.innerText.matchAll(/(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2})[^\n]*?\s([^\n']+?) atualizado\(a\) de '([^']*)' para '([^']*)'/g)) {
+      historico.push({ quando: m[1], campo: m[2].trim(), de: m[3], para: m[4] });
     }
     const documentos = [];
     for (const t of document.querySelectorAll('table')) {
@@ -297,8 +365,15 @@ export async function lerPA(page, idPa) {
       }
     }
     const link = [...document.querySelectorAll('a')].map((a) => a.getAttribute('href') || '').find((h) => /\/processo\/details\/\d+/.test(h));
-    return { campos, documentos, processoId: link ? /\/processo\/details\/(\d+)/.exec(link)[1] : null };
+    return { campos, documentos, historico, processoId: link ? /\/processo\/details\/(\d+)/.exec(link)[1] : null };
   });
+}
+
+// Valor mais recente de um campo no histórico da PA (ex.: /Sugest[aã]o Dispensa Recursal/i) → 'True'|'False'|… ou ''
+export function ultimoValorNoHistorico(historico, padrao) {
+  const chave = (q) => { const m = /(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/.exec(q); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : ''; };
+  const it = (historico || []).filter((h) => padrao.test(h.campo)).sort((a, b) => chave(a.quando).localeCompare(chave(b.quando))).pop();
+  return it ? it.para : '';
 }
 
 export async function listarDocumentosProcesso(page, processoId) {

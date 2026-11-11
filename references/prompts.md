@@ -1,4 +1,4 @@
-# Prompts da análise (escopo v1.0, 11/11/2026) e formato da resposta
+# Prompts da análise (escopo v1.1, 11/11/2026) e formato da resposta
 
 Cada subagente recebe uma lista de linhas. Para cada linha `<n>`:
 
@@ -13,31 +13,30 @@ Use só o que está escrito no documento. Não pesquise fora dele nem complete c
 
 ---
 
-## Prompt 1 — Litigância de má-fé
+## Prompt 1 — Litigância de má-fé (ajustado em 11/11/2026, pedido do escritório)
 
-Você vai ler uma decisão judicial (sentença ou acórdão) de um processo em que a Vivo (Telefônica Brasil S.A.) é parte. Diga se a decisão traz algum **indício de litigância de má-fé**, de qualquer das partes ou do advogado. Leia o documento inteiro: relatório, fundamentação e dispositivo; no acórdão, também a ementa e os votos.
+Você vai ler uma sentença de um processo em que a Vivo (Telefônica Brasil S.A.) é parte. Diga se a sentença traz **condenação expressa por litigância de má-fé**, de qualquer das partes. Leia o documento inteiro: relatório, fundamentação e dispositivo.
 
-**Responda SIM quando a decisão:**
-1. condena alguma parte por litigância de má-fé (arts. 80 e 81 do CPC; no Juizado, art. 55 da Lei 9.099/95), com ou sem multa;
-2. aponta, mesmo sem condenar, conduta de má-fé processual: alterar a verdade dos fatos, pedir contra fato incontroverso, usar o processo para objetivo ilegal, lide temerária ou recurso protelatório;
-3. aponta indício de advocacia predatória ou abusiva: ações em massa ou repetidas, petições padronizadas, pedidos fracionados em várias ações, procuração genérica ou antiga, parte que desconhece a ação, documento ou comprovante suspeito;
-4. adverte a parte ou o advogado sobre essas condutas, ou manda apurá-las.
+**Responda SIM somente quando** a sentença condena expressamente alguma parte por litigância de má-fé (arts. 80 e 81 do CPC; no Juizado, art. 55 da Lei 9.099/95), com ou sem multa. Exemplos: "condeno a parte autora por litigância de má-fé", "aplico multa por litigância de má-fé de X%", "condeno nas penas do art. 81 do CPC".
 
-**Responda NÃO quando:**
-- o tema não aparece na decisão;
-- a decisão examina o pedido de condenação por má-fé e o rejeita, sem apontar indício;
-- a menção é só a transcrição do que uma parte alegou, sem que o juiz ou o tribunal adote o argumento.
+**Responda NÃO em todos os outros casos**, inclusive quando a sentença:
+- aponta indício de má-fé processual (alterar a verdade dos fatos, lide temerária, recurso protelatório…) sem condenar;
+- aponta indício de advocacia predatória ou abusiva (ações em massa, petições padronizadas, procuração genérica, parte que desconhece a ação…) sem condenar;
+- adverte a parte ou o advogado, ou manda apurar a conduta;
+- examina o pedido de condenação por má-fé e o rejeita;
+- só transcreve o que uma parte alegou.
 
-**Regras:** use apenas o que está escrito no documento; perder a ação não é má-fé. Copie o trecho exatamente como está, sem resumir. Na dúvida entre SIM e NÃO, responda SIM e comece a justificativa com "DÚVIDA:".
+**Indícios:** quando a resposta for NÃO, mas a sentença trouxer indício, advertência, menção, pedido rejeitado ou ordem de apuração ligados à má-fé ou à advocacia predatória, registre cada um em `indicios`. Eles aparecem só no detalhe da planilha e **não** geram "Sim" na coluna.
+
+**Regras:** use apenas o que está escrito no documento; perder a ação não é má-fé. Copie o trecho exatamente como está, sem resumir. Na dúvida se há condenação expressa, responda NÃO e comece a justificativa com "DÚVIDA:".
 
 ## Prompt 2 — Expedição de ofício
 
-Você vai ler uma decisão judicial (sentença ou acórdão) de um processo em que a Vivo (Telefônica Brasil S.A.) é parte. Diga se a decisão traz algum **indício de expedição de ofício**, isto é, se determina comunicação oficial a órgão ou entidade de fora do processo. Leia o documento inteiro, inclusive o dispositivo.
+Você vai ler uma sentença de um processo em que a Vivo (Telefônica Brasil S.A.) é parte. Diga se a sentença traz algum **indício de expedição de ofício**, isto é, se determina comunicação oficial a órgão ou entidade de fora do processo. Leia o documento inteiro, inclusive o dispositivo.
 
 **Responda SIM quando a decisão:**
 1. determina expedir ofício a qualquer destinatário: OAB, Ministério Público, Polícia ou Delegacia, Corregedoria, núcleo de monitoramento de demandas ou centro de inteligência do tribunal (como o NUMOPEDE do TJMG), Defensoria, Procon, Anatel, Receita Federal, cartório, banco, empregador, a própria Vivo ou outra empresa;
-2. usa expressão equivalente dirigida a órgão ou entidade de fora do processo: "oficie-se", "expeça-se ofício", "comunique-se", "encaminhe-se cópia", "remetam-se cópias", "dê-se ciência";
-3. no acórdão, mantém a ordem de ofício dada na sentença.
+2. usa expressão equivalente dirigida a órgão ou entidade de fora do processo: "oficie-se", "expeça-se ofício", "comunique-se", "encaminhe-se cópia", "remetam-se cópias", "dê-se ciência".
 
 **Responda NÃO quando:**
 - não há ordem de ofício;
@@ -55,12 +54,14 @@ Você vai ler uma decisão judicial (sentença ou acórdão) de um processo em q
 {
   "linha": 12,
   "ma_fe": {
-    "resposta": "SIM",
-    "quem": "parte autora | advogado da parte autora | Vivo | outra parte | não se aplica",
-    "tipo": "condenação | indício | advertência | não se aplica",
-    "trecho": "cópia literal, até 400 caracteres, ou não se aplica",
+    "resposta": "SIM (só com condenação expressa) ou NÃO",
+    "quem": "parte condenada: parte autora | advogado da parte autora | Vivo | outra parte | não se aplica",
+    "trecho": "cópia literal da condenação, até 400 caracteres, ou não se aplica",
     "pagina": "3",
-    "justificativa": "uma frase"
+    "justificativa": "uma frase",
+    "indicios": [
+      { "tipo": "indício | advertência | menção | pedido rejeitado | apuração", "quem": "parte autora | advogado da parte autora | Vivo | outra parte", "trecho": "cópia literal, até 300 caracteres", "pagina": "2" }
+    ]
   },
   "oficio": {
     "resposta": "NÃO",
@@ -76,6 +77,7 @@ Você vai ler uma decisão judicial (sentença ou acórdão) de um processo em q
 }
 ```
 
-- `resposta`: exatamente `SIM` ou `NÃO`.
+- `resposta`: exatamente `SIM` ou `NÃO`. Em `ma_fe`, `SIM` só com condenação expressa.
+- `ma_fe.indicios`: use `[]` quando não houver nada a registrar. Nunca ponha a condenação expressa aqui; ela vai em `trecho`.
 - `pagina`: o número que vem depois de `=== PÁGINA` no texto.
 - `advogados_parte_autora`: use `[]` quando o documento não disser quem é o advogado.

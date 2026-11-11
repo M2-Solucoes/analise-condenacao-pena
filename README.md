@@ -1,11 +1,17 @@
 # analise-condenacao-pena
 
-Skill do Claude para o robô de análise da condenação do Pena Carvalho, carteira Vivo.
+Skill do Claude para o robô diário de análise da condenação do Pena Carvalho, carteira Vivo (escopo v1.1).
 
-O robô:
-- exporta do eLaw o relatório "Análise de Condenações", com as células Vivo e Vivo ES e o período de preenchimento;
-- abre a PA de cada linha e baixa a decisão para uma pasta por número de processo;
-- preenche as colunas que o relatório traz vazias: litigância de má-fé, expedição de ofício, sentença justa/injusta, advogado bloqueado/monitorado e adv. da parte autora.
+Todo dia, o robô:
+- pega no eLaw as PAs de sentença das células Vivo e Vivo ES em "Análise de Recurso" (etapa de dispensa recursal) que ainda não foram analisadas, pelo relatório "PA'S- Análise de Recurso";
+- busca as linhas delas no relatório "Análise de Condenações";
+- abre cada PA, lê a sugestão de dispensa recursal e o "Interpor Recurso ?" e baixa a decisão para uma pasta por número de processo;
+- preenche as colunas que o relatório traz vazias:
+  - litigância de má-fé (só condenação expressa);
+  - expedição de ofício;
+  - sentença justa/injusta;
+  - advogado bloqueado/monitorado;
+  - adv. da parte autora.
 
 Tudo roda no computador de quem executa, pelo Claude, sem servidor nem M2 Hub. O passo a passo para o Claude está em [SKILL.md](SKILL.md). Os prompts e o formato da resposta da IA estão em [references/prompts.md](references/prompts.md).
 
@@ -23,10 +29,10 @@ Também é preciso ter o Google Chrome, o `pdftotext` (poppler) e o Node 20 ou m
 | Script | O que faz |
 |---|---|
 | `scripts/sessao.mjs` | Abre a janela do Chrome do robô (perfil em `~/.cache/analise-condenacao-chrome`), espera o login e fecha |
-| `scripts/exportar.mjs` | Exporta o relatório com os filtros e cria o lote (`controle.json`) |
+| `scripts/exportar.mjs` | Monta o lote do dia (`--diario`): PAs de sentença em Análise de Recurso, sem as já analisadas, e as linhas delas no Análise de Condenações |
 | `scripts/coletar.mjs` | Processo, PA, Interpor Recurso, documentos, texto da decisão e advogado, linha a linha; retoma de onde parou |
 | `scripts/ia_lotes.mjs` | Separa as linhas para os subagentes de IA |
-| `scripts/gerar_planilha.mjs` | Monta a planilha final, com colunas de apoio e aba Resumo |
+| `scripts/gerar_planilha.mjs` | Monta a planilha do lote, com colunas de apoio e aba Resumo, e registra as PAs no histórico (`_historico.json`) |
 
 ## O que nunca vai para o repositório
 

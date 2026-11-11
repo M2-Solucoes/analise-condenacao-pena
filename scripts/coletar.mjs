@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { conectar, garantirLogado } from './lib/sessao.mjs';
-import { buscarProcessoPorNpc, listarPAs, lerPA, listarDocumentosProcesso, baixarDocumento, lerAdvogadoAdverso, norm, soDigitos } from './lib/elaw.mjs';
+import { buscarProcessoPorNpc, listarPAs, lerPA, listarDocumentosProcesso, baixarDocumento, lerAdvogadoAdverso, ultimoValorNoHistorico, norm, soDigitos } from './lib/elaw.mjs';
 import { extrairTexto, textoParaIA, advogadosDoCabecalho, extrairOABs } from './lib/textos.mjs';
 import { argumentos, pastas, lerControle, gravarControle, nomeSeguro, dataISO } from './lib/lote.mjs';
 
@@ -23,7 +23,8 @@ let fila = ctl.linhas.filter((l) => (escolhidas ? escolhidas.has(l.n) : true) &&
 if (a.limite) fila = fila.slice(0, Number(a.limite));
 if (!fila.length) { console.log('Nada a coletar neste lote.'); process.exit(0); }
 
-const RESULTADOS_PA = /^(SENTENCA|ACORDAO)$/;
+// Acórdãos não entram nesta planilha (definido pelo escritório em 11/11/2026).
+const RESULTADOS_PA = /^SENTENCA$/;
 const DECISAO = /INTEIRO TEOR|DECISAO INTEGRAL|^ACORDAO|^SENTENCA/;
 const dias = (a1, b1) => Math.abs((new Date(a1) - new Date(b1)) / 86400000);
 
@@ -43,33 +44,58 @@ try {
     const rot = `Linha ${l.n} · ${l.processo || l.pastas}`;
     l.obs = [];
     try {
-      // 1. processo
-      const proc = await buscarProcessoPorNpc(page, l.pastas);
-      if (l.processo && soDigitos(proc.numero) && soDigitos(proc.numero) !== soDigitos(l.processo)) {
-        throw new Error(`a pasta ${l.pastas} leva ao processo ${proc.numero}, diferente do relatório`);
+      let proc; let pa = null; let detalhe = null;
+      if (l.paId) {
+        // Modo padrão (v1.1): a PA veio do relatório "PA'S- Análise de Recurso" — vai direto ao detalhe dela.
+        detalhe = await lerPA(page, l.paId);
+        const c0 = detalhe.campos;
+        const datas = [dataISO(c0['Data da Publicação']), ...detalhe.documentos.map((x) => dataISO(x.dataPublicacao))].filter(Boolean);
+        if (l.dataPublicacao && datas.length && !datas.includes(l.dataPublicacao)) {
+          // o processo tem outra sentença no Análise de Condenações: esta linha não é a da PA em análise
+          l.situacao = 'descartada'; l.motivo = `linha de outra sentença do mesmo processo (publicação ${l.dataPublicacao}; a PA ${l.paId} é de ${datas[0]})`;
+          console.log(`${rot}: descartada — ${l.motivo}`);
+          gravarControle(lote, ctl);
+          continue;
+        }
+        pa = { id: l.paId, resultado: c0['Resultado PA'] || 'Sentença', status: c0.Status || '' };
+        if (!RESULTADOS_PA.test(norm(pa.resultado))) throw new Error(`a PA ${l.paId} não é de sentença (${pa.resultado})`);
+        if (!/AN[AÁ]LISE/i.test(norm(pa.status))) l.obs.push(`a PA saiu da Análise de Recurso antes da coleta (status ${pa.status || '?'})`);
+        proc = { id: detalhe.processoId || l.processoIdElaw, numero: l.processo };
+        if (!proc.id) throw new Error(`a PA ${l.paId} não mostrou o link do processo`);
+      } else {
+        // Modo por período (--todas-do-periodo): acha o processo pela pasta e a PA pela data de publicação.
+        proc = await buscarProcessoPorNpc(page, l.pastas);
+        if (l.processo && soDigitos(proc.numero) && soDigitos(proc.numero) !== soDigitos(l.processo)) {
+          throw new Error(`a pasta ${l.pastas} leva ao processo ${proc.numero}, diferente do relatório`);
+        }
+        const pas = (await listarPAs(page, proc.id)).filter((p) => RESULTADOS_PA.test(norm(p.resultado)));
+        for (const cand of pas) {
+          const d = await lerPA(page, cand.id);
+          const datas = [dataISO(d.campos['Data da Publicação']), ...d.documentos.map((x) => dataISO(x.dataPublicacao))].filter(Boolean);
+          if (l.dataPublicacao && datas.includes(l.dataPublicacao)) { pa = cand; detalhe = d; break; }
+        }
+        if (!pa) {
+          l.situacao = 'conferir'; conferir++;
+          l.obs.push(pas.length ? `nenhuma PA de sentença com a publicação de ${l.dataPublicacao || '(sem data)'} (${pas.length} PA(s) no processo)` : 'o processo não tem PA de sentença');
+          console.log(`${rot}: CONFERIR — ${l.obs.at(-1)}`);
+          gravarControle(lote, ctl);
+          continue;
+        }
       }
       l.processoId = proc.id;
-      // 2. PA da linha: resultado Sentença/Acordão com a mesma data de publicação
-      const pas = (await listarPAs(page, proc.id)).filter((p) => RESULTADOS_PA.test(norm(p.resultado)));
-      let pa = null; let detalhe = null;
-      for (const cand of pas) {
-        const d = await lerPA(page, cand.id);
-        const datas = [dataISO(d.campos['Data da Publicação']), ...d.documentos.map((x) => dataISO(x.dataPublicacao))].filter(Boolean);
-        if (l.dataPublicacao && datas.includes(l.dataPublicacao)) { pa = cand; detalhe = d; break; }
-      }
-      if (!pa) {
-        l.situacao = 'conferir'; conferir++;
-        l.obs.push(pas.length ? `nenhuma PA de sentença ou acórdão com a publicação de ${l.dataPublicacao || '(sem data)'} (${pas.length} PA(s) no processo)` : 'o processo não tem PA de sentença nem de acórdão');
-        console.log(`${rot}: CONFERIR — ${l.obs.at(-1)}`);
-        gravarControle(lote, ctl);
-        continue;
-      }
       const c = detalhe.campos;
-      l.pa = { id: pa.id, resultado: pa.resultado, interporRecurso: c['Interpor Recurso ?'] ?? '', vaiEmbargar: c['Vai Embargar ?'] ?? '', dataPublicacao: dataISO(c['Data da Publicação']) || l.dataPublicacao, descricao: c['Descrição da Sentença'] || c['Descrição da Decisão'] || '' };
+      l.pa = {
+        id: pa.id, resultado: pa.resultado, status: c.Status || pa.status || '',
+        interporRecurso: c['Interpor Recurso ?'] ?? '', vaiEmbargar: c['Vai Embargar ?'] ?? '',
+        // sugestão do escritório: campo do relatório (se houver) ou, na PA, a última alteração no histórico
+        sugestaoDispensa: l.sugestaoDispensa || ultimoValorNoHistorico(detalhe.historico, /Sugest[aã]o Dispensa Recursal/i),
+        tipoAnalise: c['Tipo de análise *'] || c['Tipo de análise'] || '',
+        dataPublicacao: dataISO(c['Data da Publicação']) || l.dataPublicacao, descricao: c['Descrição da Sentença'] || c['Descrição da Decisão'] || '',
+      };
       // 3. documentos da PA (os dois quadros)
       const pastaProc = path.join(P.processos, nomeSeguro(l.processo || proc.numero || l.pastas));
       fs.mkdirSync(pastaProc, { recursive: true });
-      const tipoPA = norm(pa.resultado) === 'ACORDAO' ? 'Acórdão' : 'Sentença';
+      const tipoPA = 'Sentença';
       const vistos = new Set(); l.documentos = [];
       for (const doc of detalhe.documentos) {
         if (vistos.has(doc.id)) continue; vistos.add(doc.id);
@@ -122,7 +148,7 @@ try {
         cabecalho: advogadosDoCabecalho(paginas),
       };
       l.situacao = 'coletada'; l.coletadaEm = new Date().toISOString(); feitas++;
-      console.log(`${rot}: ok — PA ${pa.id} (${tipoPA}, recurso: ${l.pa.interporRecurso || 'em branco'}) · ${l.documentos.length} documento(s) · decisão: ${l.fonteDecisao} · advogado: ${l.advogados.elaw ? 'eLaw' : ''}${l.advogados.cabecalho.length ? `${l.advogados.elaw ? ' + ' : ''}decisão` : ''}${!l.advogados.elaw && !l.advogados.cabecalho.length ? 'não achado (a IA procura)' : ''}`);
+      console.log(`${rot}: ok — PA ${pa.id} (${l.pa.status || tipoPA}; sugestão de dispensa: ${l.pa.sugestaoDispensa || 'sem registro'}; recurso: ${l.pa.interporRecurso || 'em branco'}) · ${l.documentos.length} documento(s) · decisão: ${l.fonteDecisao} · advogado: ${l.advogados.elaw ? 'eLaw' : ''}${l.advogados.cabecalho.length ? `${l.advogados.elaw ? ' + ' : ''}decisão` : ''}${!l.advogados.elaw && !l.advogados.cabecalho.length ? 'não achado (a IA procura)' : ''}`);
     } catch (e) {
       if (e.code === 'SESSAO') { gravarControle(lote, ctl); throw e; }
       l.situacao = 'falha'; l.tentativas = (l.tentativas || 0) + 1; l.motivo = e.message; falhas++;
