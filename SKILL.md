@@ -1,11 +1,11 @@
 ---
 name: analise-condenacao-pena
-description: Robô diário de análise da condenação do Pena Carvalho (carteira Vivo). Todo dia, pega no eLaw as PAs de sentença das células Vivo e Vivo ES que estão em "Análise de Recurso" (etapa de dispensa recursal) e ainda não foram analisadas, baixa a decisão numa pasta por número de processo e preenche, na planilha Análise de Condenações, litigância de má-fé (só condenação expressa), expedição de ofício, sentença justa/injusta (sugestão de dispensa + Interpor Recurso) e advogado monitorado (lista da Vivo), com trecho e página. Use sempre que o Pablo ou a equipe do Pena Carvalho pedirem para rodar, testar ou retomar a análise de condenações, a planilha diária de dispensa recursal ou o robô de má-fé/ofício/sentença justa/advogado monitorado, mesmo sem citar a skill. NÃO use para acórdãos, outros clientes, outros relatórios do eLaw, para preencher ou alterar PAs no eLaw, nem para peticionar.
+description: Robô diário de análise da condenação do Pena Carvalho (carteira Vivo). Todo dia, pega no eLaw as PAs de sentença das células Vivo e Vivo ES que estão em "Análise de Recurso" (etapa de dispensa recursal) e nunca apareceram numa planilha anterior (controle de carga), baixa a decisão numa pasta por número de processo e preenche, na planilha Análise de Condenações (uma por célula), litigância de má-fé (só condenação expressa), expedição de ofício, sentença justa/injusta (sugestão de dispensa + Interpor Recurso) e advogado monitorado (lista da Vivo), com trecho e página. Use sempre que o Pablo ou a equipe do Pena Carvalho pedirem para rodar, testar ou retomar a análise de condenações, a planilha diária de dispensa recursal ou o robô de má-fé/ofício/sentença justa/advogado monitorado, mesmo sem citar a skill. NÃO use para acórdãos, outros clientes, outros relatórios do eLaw, para preencher ou alterar PAs no eLaw, nem para peticionar.
 ---
 
 # Análise de condenações · Pena Carvalho (Vivo) — execução diária
 
-O robô entrega, por dia, a planilha "Análise de Condenações" só com as **PAs de sentença na etapa de dispensa recursal (status "Análise de Recurso")** das células Vivo e Vivo ES ainda não analisadas. Ela segue para a empresa validar a dispensa ou o recurso.
+O robô entrega, por dia, a planilha "Análise de Condenações" só com as **PAs de sentença na etapa de dispensa recursal (status "Análise de Recurso")** que **nunca apareceram numa planilha anterior**. Sai **uma planilha por célula**: uma da Vivo e outra da Vivo ES. Elas seguem para a empresa validar a dispensa ou o recurso.
 
 Colunas que o relatório traz vazias e o robô preenche:
 - **Condenação em litigância de má-fé**: "Sim" só com condenação expressa. Indícios, advertências e menções vão para o detalhe.
@@ -16,7 +16,7 @@ Colunas que o relatório traz vazias e o robô preenche:
 
 Junto vão colunas de apoio (trecho, página, sugestão, recurso, fonte do advogado, situação), uma aba **Resumo** e uma pasta por processo com os documentos da PA.
 
-O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A v1.0 é de 11/11/2026; a v1.1 incorpora os ajustes pedidos pelo escritório no mesmo dia. Se o escritório mudar uma regra, ajuste aqui e nos scripts.
+O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A v1.0 é de 11/11/2026; a v1.1 incorpora os ajustes pedidos pelo escritório no mesmo dia. Em 12/11/2026 vieram mais duas regras, ainda fora do escopo: uma planilha por célula e o controle de carga. Se o escritório mudar uma regra, ajuste aqui e nos scripts.
 
 ## Regras fixas
 
@@ -26,7 +26,8 @@ O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-anal
 - **Só sentença.** Acórdãos não entram nesta planilha (definido pelo escritório).
 - **Toda resposta da IA tem prova.** Um "Sim" de má-fé ou ofício precisa de trecho literal e página. Sem isso, a linha vai para "conferir".
 - **Sem invenção.** Campo sem fonte fica vazio, com o motivo em Observações.
-- **Dados fora do vault.** Lotes, PDFs e planilhas ficam em `~/Projetos Claude/Análise de Condenações/<AAAA-MM-DD>/` (ou na pasta que o escritório indicar), nunca no Segundo Cérebro nem no repositório da skill. O histórico das PAs analisadas fica em `…/_historico.json`.
+- **Controle de carga: uma PA aparece uma vez só.** Toda PA que sai numa planilha é registrada em `…/_historico.json` com a data. Se ela continuar em Análise de Recurso nos dias seguintes, não aparece de novo. Só entra na planilha (e no controle) a linha analisada de ponta a ponta, coletada no eLaw e lida pela IA. Linha com falha, não coletada ou sem leitura da IA fica fora, vai para as ocorrências do Resumo e volta na próxima execução. Rodar de novo o mesmo lote no mesmo dia mantém as PAs dele. Nunca apague nem edite o `_historico.json` à mão.
+- **Dados fora do vault.** Lotes, PDFs e planilhas ficam em `~/Projetos Claude/Análise de Condenações/<AAAA-MM-DD>/` (ou na pasta que o escritório indicar), nunca no Segundo Cérebro nem no repositório da skill.
 - **Primeira execução em produção: no máximo 20 linhas**, conferidas pela equipe (`coletar.mjs --limite 20`).
 
 ## Pré-requisitos
@@ -54,7 +55,7 @@ node scripts/exportar.mjs --diario
 
 O lote vai para `~/Projetos Claude/Análise de Condenações/<hoje>/`. O script:
 1. Exporta **"PA'S- Análise de Recurso"** (pasta PA), com Célula = Vivo e Vivo ES. Ele lista as PAs em status "Análise de Recurso", com o ID da PA. O modelo padrão desse relatório falha no eLaw ("coluna configurada 'AdvogadoAdverso'"); o script passa sozinho para a cópia global ("Cópia - PA'S- Análise de Recurso"), que exporta.
-2. Fica só com as de resultado **Sentença** e tira as que já estão no histórico. Use `--incluir-anteriores` para reprocessar.
+2. Fica só com as de resultado **Sentença** e tira as que já saíram numa planilha de dia anterior (controle de carga). Mostra a conta por célula: de sentença, já enviadas, novas. Use `--incluir-anteriores` só para reprocessar de propósito.
 3. Exporta o **"Análise de Condenações"** (Período de Preenchimento: do cadastro da PA mais antiga até hoje) e fica só com as linhas dessas PAs, pelo número do processo.
 
 Sem PA nova, o lote fica vazio, e o dia termina aí. Se a exportação falhar, peça à pessoa que exporte à mão e rode com `--arquivo-recurso <xlsx> --arquivo-condenacoes <xlsx>`.
@@ -72,7 +73,7 @@ Para cada linha, o script:
 - lê o advogado no campo Advogado Adverso e no quadro "Partes / Advogados" da decisão;
 - grava o texto em `textos/<linha>.txt`.
 
-Linhas com falha são tentadas de novo nas próximas execuções, até 3 vezes.
+Se o comando for rodado de novo no mesmo lote, ele tenta outra vez as linhas com falha, até 3 vezes. Linha que continua com falha fica fora da planilha e volta no lote do dia seguinte.
 
 ### 4. Ler as decisões (IA)
 
@@ -92,7 +93,11 @@ Não leia as decisões na conversa principal. Rode `ia_lotes.mjs` de novo até z
 node scripts/gerar_planilha.mjs --lote "<lote>" --monitorados "~/Projetos Claude/Análise de Condenações/_lista-monitorados/RELATÓRIO SIMPLES ADVOGADOS MONITORADOS NACIONAL.xlsx"
 ```
 
-A planilha sai em `Planilhas/Análise de Condenações - Vivo e Vivo ES - <lote>.xlsx`, só com as linhas do lote, e as PAs analisadas entram no histórico.
+Sai **uma planilha por célula**:
+- `Planilhas/Análise de Condenações - Vivo - <lote>.xlsx`;
+- `Planilhas/Análise de Condenações - Vivo ES - <lote>.xlsx`.
+
+Cada uma tem só as PAs analisadas da célula e uma aba Resumo própria. O Resumo tem os números, as ocorrências (linhas que ficaram fora e voltam na próxima execução) e o **controle de carga**: as PAs que continuam em Análise de Recurso e já saíram antes, com a data. Célula sem PA nova no dia não gera planilha; diga isso no relato. As PAs que saíram nas planilhas entram no controle de carga (`_historico.json`). Para teste, use `--sem-historico` e `--pasta-saida <pasta>`. No modo por período, o relatório não traz a célula, e sai uma planilha só, "Vivo e Vivo ES".
 
 **Regras (escopo v1.1):**
 - **Sentença justa/injusta**, considerando os dois campos da PA:
@@ -115,13 +120,13 @@ A planilha sai em `Planilhas/Análise de Condenações - Vivo e Vivo ES - <lote>
 ### 6. Entregar
 
 - Rode `node scripts/sessao.mjs fechar`.
-- Relate em linguagem simples, pela aba Resumo:
-  - PAs em Análise de Recurso, novas e já analisadas;
+- Relate em linguagem simples, pelas abas Resumo, **por célula**:
+  - PAs em Análise de Recurso, novas e já enviadas em dias anteriores (não repetidas);
   - linhas concluídas, para conferir e com falha;
   - Justa e Injusta;
   - "Sim" de cada coluna;
   - ocorrências e o tratamento de cada uma.
-- Entregue o arquivo `.xlsx` (nunca Artifact).
+- Entregue os arquivos `.xlsx`, um por célula (nunca Artifact).
 
 ## Execução diária e agendamento
 
@@ -143,7 +148,7 @@ Combine o horário e quem faz o login com o escritório. O Pablo decide antes de
 - **Modelo padrão quebrado:** o "PA'S- Análise de Recurso" padrão não exporta (erro do eLaw na coluna "Advogado da Outra Parte"). O robô usa a cópia global. Se o escritório corrigir o padrão, o robô volta a usá-lo sozinho.
 - **Sugestão de dispensa:** só no histórico da PA. Se o eLaw mudar o texto do log, a sugestão fica "sem registro", e a sentença justa, em branco para conferir.
 - **"Tipo de análise":** campo dinâmico da PA (hoje sempre "Viabilidade Recursal" nessa etapa). Fica registrado nas colunas de apoio, mas não filtra.
-- **PA sem linha no Análise de Condenações** (preenchimento fora do período ou relatório desatualizado): vai para as ocorrências do Resumo e fica fora da planilha.
+- **PA sem linha no Análise de Condenações** (preenchimento fora do período ou relatório desatualizado): vai para as ocorrências do Resumo, fica fora da planilha e volta na próxima execução.
 - O "SENTENÇA INTEIRO TEOR" pode vir digitalizado. A PA costuma ter também a "DECISÃO INTEGRAL", e o robô fica com o documento que tem texto.
 - O quadro "Partes / Advogados" pode ter corréus. Só vale o polo ativo. Decisões do eproc não trazem o quadro.
 - Os campos de data do filtro são só leitura. As datas são escolhidas no calendário, e o resumo da tela é conferido antes de exportar.

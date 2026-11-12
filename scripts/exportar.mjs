@@ -1,7 +1,8 @@
 // Passo 1: monta o lote do dia.
 //
 // Padrão (escopo v1.1, pedido do escritório em 11/11/2026): só as PAs de SENTENÇA na etapa de dispensa recursal,
-// com status "Análise de Recurso", das células Vivo e Vivo ES, que ainda não foram analisadas em lotes anteriores.
+// com status "Análise de Recurso", das células Vivo e Vivo ES, que NUNCA apareceram numa planilha de lote anterior
+// (controle de carga, pedido do escritório em 12/11/2026: a PA que continua no relatório não volta no dia seguinte).
 //   1. exporta "PA'S- Análise de Recurso" (lista as PAs nessa etapa, com o ID da PA);
 //   2. exporta "Análise de Condenações" (a planilha enviada à empresa) desde o cadastro da PA mais antiga;
 //   3. fica só com as linhas do Análise de Condenações dessas PAs (pelo número do processo).
@@ -17,7 +18,7 @@ import ExcelJS from 'exceljs';
 import { conectar } from './lib/sessao.mjs';
 import { exportarRelatorio, RELATORIOS, norm, soDigitos } from './lib/elaw.mjs';
 import { argumentos, pastas, gravarControle, dataISO, hojeBR } from './lib/lote.mjs';
-import { lerHistorico } from './lib/historico.mjs';
+import { lerHistorico, jaEnviada } from './lib/historico.mjs';
 
 const a = argumentos();
 const base = path.resolve(a.base || path.join(os.homedir(), 'Projetos Claude', 'Análise de Condenações'));
@@ -83,11 +84,27 @@ try {
     })).filter((x) => x.paId);
     const naEtapa = todas.filter((x) => /AN[AÁ]LISE D?E? ?RECURSO/i.test(norm(x.status)));
     const sentencas = naEtapa.filter((x) => norm(x.resultado) === 'SENTENCA');
+    // controle de carga: fora as PAs que já saíram numa planilha de lote anterior (o mesmo lote, rodado de novo, mantém as suas)
     const hist = lerHistorico(base);
-    const anteriores = sentencas.filter((x) => hist.pas[x.paId]);
-    pasSelecionadas = a['incluir-anteriores'] ? sentencas : sentencas.filter((x) => !hist.pas[x.paId]);
-    infoRecurso = { arquivo: path.relative(lote, arqRec), total: todas.length, naEtapa: naEtapa.length, sentencas: sentencas.length, semResultado: naEtapa.filter((x) => !x.resultado).length, jaAnalisadas: anteriores.length };
-    console.log(`PAs em Análise de Recurso (Vivo e Vivo ES): ${naEtapa.length} · de sentença: ${sentencas.length}${infoRecurso.semResultado ? ` · sem resultado preenchido: ${infoRecurso.semResultado}` : ''} · já analisadas antes: ${anteriores.length}${a['incluir-anteriores'] ? ' (incluídas, --incluir-anteriores)' : ''} · novas: ${sentencas.length - anteriores.length}`);
+    const nomeLote = path.basename(lote);
+    const anteriores = sentencas.map((x) => ({ x, h: jaEnviada(hist, x.paId, nomeLote) })).filter((y) => y.h)
+      .map(({ x, h }) => ({ paId: x.paId, processo: x.processo, celula: x.celula, enviadaEm: h.data, loteEnvio: h.lote }));
+    const enviada = new Set(anteriores.map((y) => y.paId));
+    pasSelecionadas = a['incluir-anteriores'] ? sentencas : sentencas.filter((x) => !enviada.has(x.paId));
+    const porCelula = {};
+    for (const x of naEtapa) {
+      const c = (porCelula[x.celula || '(sem célula)'] ||= { naEtapa: 0, sentencas: 0, semResultado: 0, jaEnviadas: 0, novas: 0 });
+      c.naEtapa++;
+      if (!x.resultado) c.semResultado++;
+      if (norm(x.resultado) === 'SENTENCA') { c.sentencas++; if (enviada.has(x.paId)) c.jaEnviadas++; else c.novas++; }
+    }
+    infoRecurso = {
+      arquivo: path.relative(lote, arqRec), total: todas.length, naEtapa: naEtapa.length, sentencas: sentencas.length,
+      semResultado: naEtapa.filter((x) => !x.resultado).length, jaEnviadas: anteriores.length, anteriores, porCelula,
+      incluiuAnteriores: !!a['incluir-anteriores'],
+    };
+    console.log(`PAs em Análise de Recurso (Vivo e Vivo ES): ${naEtapa.length} · de sentença: ${sentencas.length}${infoRecurso.semResultado ? ` · sem resultado preenchido: ${infoRecurso.semResultado}` : ''} · já enviadas em dias anteriores: ${anteriores.length}${a['incluir-anteriores'] ? ' (incluídas, --incluir-anteriores)' : ''} · novas: ${sentencas.length - anteriores.length}`);
+    for (const [cel, c] of Object.entries(porCelula)) console.log(`  ${cel}: ${c.sentencas} de sentença · ${c.jaEnviadas} já enviada(s) · ${c.novas} nova(s)`);
     if (!pasSelecionadas.length) {
       gravarControle(lote, { versao: 2, modo, criado: new Date().toISOString(), base, origem: { recurso: infoRecurso }, linhas: [], semLinha: [] });
       console.log('Nenhuma PA nova para analisar hoje. O lote foi registrado vazio.');
