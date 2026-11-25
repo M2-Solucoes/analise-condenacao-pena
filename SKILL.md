@@ -16,7 +16,7 @@ Colunas que o relatório traz vazias e o robô preenche:
 
 Junto vão colunas de apoio (trecho, página, sugestão, recurso, fonte do advogado, situação), uma aba **Resumo** e uma pasta por processo com os documentos da PA.
 
-O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A v1.0 é de 11/11/2026; a v1.1 incorpora os ajustes pedidos pelo escritório no mesmo dia. Em 12/11/2026 vieram mais duas regras, ainda fora do escopo: uma planilha por célula e o controle de carga. Se o escritório mudar uma regra, ajuste aqui e nos scripts.
+O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A versão em vigor é a **v1.2**, de 12/11/2026: uma planilha por célula e o controle de carga (página 14 do escopo). A v1.0 e a v1.1, ambas de 11/11/2026, ficaram guardadas com o sufixo da versão. A proposta comercial está na mesma pasta. Se o escritório mudar uma regra, ajuste aqui, nos scripts e no escopo.
 
 ## Regras fixas
 
@@ -32,13 +32,33 @@ O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-anal
 
 ## Pré-requisitos
 
-- Node 20 ou mais novo e `npm install` feito na pasta da skill (puppeteer-core e exceljs). Também `pdftotext` (poppler) e o Google Chrome.
+- Node 20 ou mais novo, os pacotes da skill (puppeteer-core e exceljs), o `pdftotext` (Poppler) e o Google Chrome. O **passo 0** confere e instala esses itens antes de cada execução.
 - Acesso ao eLaw do Pena Carvalho (`penacarvalho.elawio.com.br`) com usuário que veja as células Vivo e Vivo ES e o módulo de relatórios.
 - Lista de monitorados da Vivo no modelo **"RELATÓRIO SIMPLES ADVOGADOS MONITORADOS NACIONAL"** (aba "Lista Advs"). Use sempre esse modelo. A versão em uso fica em `~/Projetos Claude/Análise de Condenações/_lista-monitorados/`; quando a Vivo mandar outra, substitua o arquivo.
 
 Scripts em `scripts/`, rodados da pasta da skill. Prompts e formato da resposta da IA em `references/prompts.md`.
 
 ## Fluxo diário
+
+### 0. Preparar o computador (sempre, antes de qualquer outro passo)
+
+```bash
+node scripts/preparar.mjs
+```
+
+O script confere sete itens: Node, pacotes da skill, pdftotext, Google Chrome, pasta dos lotes, lista de monitorados e acesso ao eLaw. Ele instala o que faltar:
+- pacotes, pelo `npm ci`;
+- Poppler e Chrome, pelo Homebrew no Mac ou pelo winget no Windows;
+- pasta dos lotes, que ele cria.
+
+O que fazer com o resultado:
+- **`PRONTO`:** siga para o passo 1.
+- **`FALTA`** (código de saída 1): **não rode o robô.** Resolva cada item como o script indica e rode o passo 0 de novo. Peça à pessoa o que depende dela: senha do computador para instalar, Homebrew ausente ou lista da Vivo.
+- **Sem o comando `node`:** instale o Node antes (Mac: `brew install node`; Windows: `winget install --id OpenJS.NodeJS.LTS --exact`), abra um terminal novo e rode o passo 0.
+- **Só conferir, sem instalar:** use `--so-verificar`.
+- **Pasta ou lista fora do padrão:** use `--base` e `--monitorados`.
+
+Por que o passo é obrigatório: sem o pdftotext, o robô não para. Ele trata toda decisão como digitalizada, e a análise piora sem aviso. No Windows, o winget aceita os termos de licença do Chrome e do Poppler ao instalar.
 
 ### 1. Abrir a janela e o login
 
@@ -99,7 +119,7 @@ Sai **uma planilha por célula**:
 
 Cada uma tem só as PAs analisadas da célula e uma aba Resumo própria. O Resumo tem os números, as ocorrências (linhas que ficaram fora e voltam na próxima execução) e o **controle de carga**: as PAs que continuam em Análise de Recurso e já saíram antes, com a data. Célula sem PA nova no dia não gera planilha; diga isso no relato. As PAs que saíram nas planilhas entram no controle de carga (`_historico.json`). Para teste, use `--sem-historico` e `--pasta-saida <pasta>`. No modo por período, o relatório não traz a célula, e sai uma planilha só, "Vivo e Vivo ES".
 
-**Regras (escopo v1.1):**
+**Regras de classificação (definidas na v1.1, mantidas na v1.2):**
 - **Sentença justa/injusta**, considerando os dois campos da PA:
 
 | Sugestão de dispensa (escritório) | Interpor Recurso ? | Coluna |
@@ -131,9 +151,10 @@ Cada uma tem só as PAs analisadas da célula e uma aba Resumo própria. O Resum
 ## Execução diária e agendamento
 
 O escritório pediu execução **diária**, por causa dos prazos recursais. O robô depende do login de uma pessoa no eLaw, então o agendamento serve para lembrar e preparar, não para rodar sem ninguém. Uma tarefa agendada do Claude no horário combinado:
-1. abre a janela;
-2. pede o login;
-3. segue os passos 2 a 6.
+1. prepara o computador (passo 0) e para se faltar algo;
+2. abre a janela;
+3. pede o login;
+4. segue os passos 2 a 6.
 
 Combine o horário e quem faz o login com o escritório. O Pablo decide antes de criar a tarefa.
 

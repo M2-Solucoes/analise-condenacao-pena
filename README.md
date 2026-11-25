@@ -1,6 +1,6 @@
 # analise-condenacao-pena
 
-Skill do Claude para o robô diário de análise da condenação do Pena Carvalho, carteira Vivo (escopo v1.1).
+Skill do Claude para o robô diário de análise da condenação do Pena Carvalho, carteira Vivo (escopo v1.2).
 
 Todo dia, o robô:
 - pega no eLaw as PAs de sentença das células Vivo e Vivo ES em "Análise de Recurso" (etapa de dispensa recursal), pelo relatório "PA'S- Análise de Recurso";
@@ -20,16 +20,22 @@ Tudo roda no computador de quem executa, pelo Claude, sem servidor nem M2 Hub. O
 ## Instalação
 
 ```bash
-npm install
 ln -s "$PWD" "<pasta de skills do Claude>/analise-condenacao-pena"
+node scripts/preparar.mjs
 ```
 
-Também é preciso ter o Google Chrome, o `pdftotext` (poppler) e o Node 20 ou mais novo.
+O `preparar.mjs` confere tudo o que o robô precisa e instala o que faltar:
+- os pacotes, pelo `npm ci`;
+- o `pdftotext` (Poppler) e o Google Chrome, pelo Homebrew no Mac ou pelo winget no Windows;
+- a pasta dos lotes, que ele cria.
+
+Ele também confere a lista de monitorados da Vivo e o acesso ao eLaw. O Claude o roda antes de toda execução (passo 0 do SKILL.md). Só o Node 20 ou mais novo precisa existir antes, porque o próprio script roda nele.
 
 ## Scripts
 
 | Script | O que faz |
 |---|---|
+| `scripts/preparar.mjs` | Passo 0: confere Node, pacotes, pdftotext, Chrome, pasta dos lotes, lista de monitorados e eLaw; instala o que faltar (`--so-verificar` só confere) |
 | `scripts/sessao.mjs` | Abre a janela do Chrome do robô (perfil em `~/.cache/analise-condenacao-chrome`), espera o login e fecha |
 | `scripts/exportar.mjs` | Monta o lote do dia (`--diario`): PAs de sentença em Análise de Recurso, sem as que já saíram numa planilha anterior, e as linhas delas no Análise de Condenações |
 | `scripts/coletar.mjs` | Processo, PA, Interpor Recurso, documentos, texto da decisão e advogado, linha a linha; retoma de onde parou |
@@ -42,4 +48,9 @@ Lotes, PDFs, planilhas, a lista de monitorados da Vivo e o perfil do Chrome. O `
 
 ## Origem
 
-O escopo v1.0 é de 11/11/2026 e está no repositório de marca da M2, em `proposal-template/pena-robo-analise-condenacao/`. Telas e regras foram mapeadas no eLaw do Pena Carvalho no mesmo dia.
+O escopo fica no repositório de marca da M2, em `proposal-template/pena-robo-analise-condenacao/`, junto com a proposta comercial:
+- v1.0 de 11/11/2026;
+- v1.1, também de 11/11, com os ajustes do escritório;
+- v1.2 de 12/11, com uma planilha por célula e o controle de carga.
+
+Telas e regras foram mapeadas no eLaw do Pena Carvalho em 11/11/2026.
