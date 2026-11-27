@@ -6,6 +6,12 @@
   "description": "Skill do Claude: análise de condenações (PAs de sentença e acórdão) do eLaw do Pena Carvalho, carteira Vivo",
   "dependencies": {
     "exceljs": "4.4.0",
-    "puppeteer-core": "24.10.2"
+    "puppeteer-core": "25.19.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

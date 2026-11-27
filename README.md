@@ -29,7 +29,7 @@ O `preparar.mjs` confere tudo o que o robô precisa e instala o que faltar:
 - o `pdftotext` (Poppler) e o Google Chrome, pelo Homebrew no Mac ou pelo winget no Windows;
 - a pasta dos lotes, que ele cria.
 
-Ele também confere a lista de monitorados da Vivo e o acesso ao eLaw. O Claude o roda antes de toda execução (passo 0 do SKILL.md). Só o Node 20 ou mais novo precisa existir antes, porque o próprio script roda nele.
+Ele também confere a lista de monitorados da Vivo e o acesso ao eLaw. O Claude o roda antes de toda execução (passo 0 do SKILL.md). Só o Node 22.12 ou mais novo precisa existir antes, porque o próprio script roda nele.
 
 ## Scripts
 

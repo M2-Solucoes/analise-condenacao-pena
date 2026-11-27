@@ -33,7 +33,7 @@ O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-anal
 
 ## Pré-requisitos
 
-- Node 20 ou mais novo, os pacotes da skill (puppeteer-core e exceljs), o `pdftotext` (Poppler) e o Google Chrome. O **passo 0** confere e instala esses itens antes de cada execução.
+- Node 22.12 ou mais novo, os pacotes da skill (puppeteer-core e exceljs), o `pdftotext` (Poppler) e o Google Chrome. O **passo 0** confere e instala esses itens antes de cada execução.
 - Acesso ao eLaw do Pena Carvalho (`penacarvalho.elawio.com.br`) com usuário que veja as células Vivo e Vivo ES e o módulo de relatórios.
 - Lista de monitorados da Vivo no modelo **"RELATÓRIO SIMPLES ADVOGADOS MONITORADOS NACIONAL"** (aba "Lista Advs"). Use sempre esse modelo. A versão em uso fica em `~/Projetos Claude/Análise de Condenações/_lista-monitorados/`; quando a Vivo mandar outra, substitua o arquivo.
 

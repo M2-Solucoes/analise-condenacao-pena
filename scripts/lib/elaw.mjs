@@ -59,6 +59,23 @@ async function selectsDoCartao(page, titulo) {
   for (let i = 0; i < n; i++) out.push((await h.getProperty(String(i))).asElement());
   return out;
 }
+// Clica num controle do filtro trazendo-o antes para o centro da tela: a barra fixa de "Preview / Exportar Excel"
+// fica no rodapé e cobre o que estiver embaixo (em 27/11/2026 o eLaw acrescentou "Status da PA" ao relatório, o
+// cartão de filtros desceu e o clique no filtro de Célula caía na barra).
+async function clicarNoCentro(el) {
+  await el.evaluate((e) => e.scrollIntoView({ block: 'center', inline: 'center' }));
+  await espera(300);
+  await el.click();
+}
+// espera as opções de um mat-select aberto aparecerem (lista carregada depois do clique)
+async function esperarOpcoes(page, ms = 8000) {
+  const fim = Date.now() + ms;
+  while (Date.now() < fim) {
+    if ((await opcoesVisiveis(page)).length) return true;
+    await espera(250);
+  }
+  return false;
+}
 const opcoesVisiveis = (page) => page.evaluate(() => [...document.querySelectorAll('mat-option')].filter((o) => o.offsetParent !== null).map((o) => ({ t: o.innerText.trim(), sel: o.getAttribute('aria-selected') === 'true' })));
 const clicarOpcao = (page, texto) => page.evaluate((t) => { const o = [...document.querySelectorAll('mat-option')].find((x) => x.offsetParent !== null && x.innerText.trim() === t); if (o) { o.click(); return true; } return false; }, texto);
 const chips = (page) => page.evaluate(() => [...document.querySelectorAll('mat-chip, .mat-mdc-chip')].map((c) => c.innerText.trim()).filter((t) => t.includes(':')));
@@ -130,7 +147,9 @@ async function exportarModelo(page, { rel, url, de, ate, aoProgresso }) {
   // Célula
   const [selCel] = await selectsDoCartao(page, /^C[ée]lula$/i);
   if (!selCel) throw new Error(`não achei o filtro de Célula no relatório ${rel.nome}`);
-  await selCel.click(); await espera(1200);
+  await clicarNoCentro(selCel);
+  if (!(await esperarOpcoes(page))) throw new Error(`o filtro de Célula do relatório ${rel.nome} não abriu a lista de opções`);
+  await espera(400);
   for (const c of ['Vivo', 'Vivo ES']) {
     const ops = await opcoesVisiveis(page);
     const o = ops.find((x) => x.t === c);
@@ -144,7 +163,8 @@ async function exportarModelo(page, { rel, url, de, ate, aoProgresso }) {
   if (de && ate) {
     const [selTipo] = await selectsDoCartao(page, rel.periodo);
     if (!selTipo) throw new Error(`não achei o filtro de período no relatório ${rel.nome}`);
-    await selTipo.click(); await espera(1000);
+    await clicarNoCentro(selTipo);
+    if (!(await esperarOpcoes(page))) throw new Error(`o filtro de período do relatório ${rel.nome} não abriu a lista de opções`);
     if (!(await clicarOpcao(page, 'Intervalo'))) throw new Error('o filtro de período não ofereceu "Intervalo"');
     await espera(1200);
     datas = await preencherIntervalo(page, de, ate);
@@ -196,7 +216,7 @@ async function escolherNoCalendario(page, botao, dataBR) {
   const [d, m, y] = dataBR.split('/').map(Number);
   if (!d || !m || !y) throw new Error(`data inválida: ${dataBR} (use dd/mm/aaaa)`);
   const alvo = `${String(d).padStart(2, '0')} de ${MESES[m - 1]} de ${y}`;
-  await botao.click();
+  await clicarNoCentro(botao);
   await page.waitForSelector('mat-calendar', { timeout: 10_000 }).catch(() => { throw new Error('o calendário do filtro de período não abriu'); });
   await espera(500);
   let esperas = 0;
@@ -250,7 +270,7 @@ export async function buscarProcessoPorNpc(page, npc) {
   await page.goto(`${ELAW}/processo/list?cache=false`, { waitUntil: 'networkidle2', timeout: 60_000 });
   if (/Auth\/Login/i.test(page.url())) throw new SessaoCaiu();
   await page.waitForSelector('#Filters_NPC', { timeout: 30_000 }).catch(() => { throw new Error('a lista de processos do eLaw não abriu'); });
-  await page.click('#Filters_NPC', { clickCount: 3 });
+  await page.click('#Filters_NPC', { count: 3 }); // clique triplo seleciona o texto (puppeteer 25: "count")
   await page.keyboard.press('Backspace');
   await page.type('#Filters_NPC', alvo);
   await page.select('#Filters_StatusId', '-1');

@@ -4,7 +4,8 @@
 //   opções: --base <pasta dos lotes>  --monitorados <xlsx da lista da Vivo>
 //
 // O que confere e o que faz quando falta:
-//   1. Node 20 ou mais novo .......... não se instala sozinho (este script já roda no Node): diz o comando
+//   1. Node 22.12 ou mais novo ....... não se instala sozinho (este script já roda no Node): diz o comando
+//                                      (o puppeteer-core 25 exige o Node 22.12)
 //   2. Pacotes do robô ............... npm ci (puppeteer-core e exceljs, nas versões do package-lock)
 //   3. pdftotext (Poppler) ........... Mac: brew install poppler · Windows: winget · Linux: diz o comando
 //   4. Google Chrome ................. Mac: brew install --cask google-chrome · Windows: winget · Linux: diz o comando
@@ -62,9 +63,9 @@ const WINGET = ['--exact', '--silent', '--accept-source-agreements', '--accept-p
 console.log(`Preparando o computador para o robô de análise da condenação${SO_VERIFICAR ? ' (só verificação)' : ''}…`);
 
 // 1. Node
-const major = Number(process.versions.node.split('.')[0]);
-if (major >= 20) ok(`Node ${process.versions.node}`);
-else falta(`Node ${process.versions.node} (precisa do 20 ou mais novo)`, MAC ? 'rode `brew install node`' : WIN ? 'rode `winget install --id OpenJS.NodeJS.LTS --exact`' : 'instale o Node 20 LTS pelo gerenciador do sistema');
+const [major, minor] = process.versions.node.split('.').map(Number);
+if (major > 22 || (major === 22 && minor >= 12)) ok(`Node ${process.versions.node}`);
+else falta(`Node ${process.versions.node} (precisa do 22.12 ou mais novo)`, MAC ? 'rode `brew install node` (ou `brew upgrade node`)' : WIN ? 'rode `winget install --id OpenJS.NodeJS.LTS --exact`' : 'instale o Node 22 LTS ou mais novo pelo gerenciador do sistema');
 
 // 2. Pacotes do robô
 const pkg = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8'));
@@ -105,7 +106,8 @@ else falta('pdftotext (Poppler)', MAC ? (acharBrew() ? 'rode `brew install poppl
 async function caminhoChrome() {
   try {
     const b = await import('@puppeteer/browsers');
-    return b.computeSystemExecutablePath({ browser: b.Browser.CHROME, platform: b.detectBrowserPlatform(), channel: b.ChromeReleaseChannel.STABLE });
+    // await: no @puppeteer/browsers 3 (puppeteer-core 25) as funções de caminho podem devolver Promise
+    return await b.computeSystemExecutablePath({ browser: b.Browser.CHROME, platform: await b.detectBrowserPlatform(), channel: b.ChromeReleaseChannel.STABLE });
   } catch { return null; }
 }
 let chrome = await caminhoChrome();
