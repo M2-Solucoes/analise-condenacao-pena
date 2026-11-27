@@ -137,6 +137,7 @@ Cada uma tem só as PAs analisadas da célula e uma aba Resumo própria. O Resum
   - O robô junta os advogados do eLaw, do cabeçalho e da IA.
   - Compara primeiro a OAB e depois o nome completo. Nome de uma palavra só não é comparado.
   - Só ATIVO conta. Um advogado INATIVO na lista vira "Não", com observação.
+  - "ATERMAÇÃO" no campo Advogado Adverso do eLaw quer dizer parte sem advogado (Juizado). Sem advogado nas outras fontes, a linha fica "Não" e "Sem advogado (atermação)" (definido em 27/11/2026). Se a decisão citar advogado, ele é comparado normalmente e a linha ganha uma observação.
 
 ### 6. Entregar
 

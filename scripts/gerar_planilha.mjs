@@ -68,7 +68,9 @@ const APOIO = ['Má-fé · detalhe', 'Ofício · detalhe', 'Sugestão dispensa r
 const fmtAdv = (x) => `${x.nome}${x.oabs?.length ? ` (${x.oabs.map((o) => `OAB/${o.uf} ${o.numero}`).join(', ')})` : ''}`;
 const fmtSug = (v) => (/^true$/i.test(v) ? 'Sim' : /^false$/i.test(v) ? 'Não' : v || '(sem registro)');
 const brData = (iso) => (/^\d{4}-\d{2}-\d{2}/.test(String(iso || '')) ? String(iso).slice(0, 10).split('-').reverse().join('/') : String(iso || ''));
-const VOLTA = 'fora da planilha e do controle de carga; entra de novo na próxima execução';
+// valor do campo de advogado que indica parte sem advogado (já normalizado por normNome: sem acento, maiúsculo)
+const SEM_ADVOGADO = /^(ATERMACAO|ATERMADO|SEM ADVOGADO|PARTE SEM ADVOGADO|JUS POSTULANDI)$/;
+const VOLTA ='fora da planilha e do controle de carga; entra de novo na próxima execução';
 
 async function montar(celula) {
   const linhas = doLote.filter((l) => celulaDe(l) === celula);
@@ -92,7 +94,7 @@ async function montar(celula) {
   const estiloCab = cabRow.getCell(C.processo).style;
   for (const [t, i] of Object.entries(A)) { const c = cabRow.getCell(i); c.value = t; c.style = { ...estiloCab }; ws.getColumn(i).width = /detalhe|Observa|motivo/.test(t) ? 60 : 26; }
 
-  const cont = { conferir: 0, documentos: 0, soDispositivo: 0, maFe: 0, maFeIndicios: 0, oficio: 0, justa: 0, injusta: 0, justaBranco: 0, monitorado: 0, advNaoIdentificado: 0 };
+  const cont = { conferir: 0, documentos: 0, soDispositivo: 0, maFe: 0, maFeIndicios: 0, oficio: 0, justa: 0, injusta: 0, justaBranco: 0, monitorado: 0, advNaoIdentificado: 0, semAdvogado: 0 };
   const ocorrencias = [];
   const paraHistorico = [];
 
@@ -120,18 +122,28 @@ async function montar(celula) {
     if (sj.valor === 'Justa') cont.justa++; else if (sj.valor === 'Injusta') cont.injusta++; else cont.justaBranco++;
     if (sj.conferir) obs.push(`sentença justa: ${sj.motivo}`);
     // advogado da parte autora: eLaw, cabeçalho da decisão e leitura da IA
-    const fontes = []; const advs = [];
-    const add = (x, fonte) => { if (!x?.nome) return; const k = normNome(x.nome); const ja = advs.find((y) => normNome(y.nome) === k); if (ja) { for (const o of x.oabs || []) if (!ja.oabs.some((p) => p.uf === o.uf && p.numero === o.numero)) ja.oabs.push(o); } else advs.push({ nome: x.nome.trim(), oabs: [...(x.oabs || [])] }); if (!fontes.includes(fonte)) fontes.push(fonte); };
+    // "ATERMAÇÃO" (e equivalentes) no eLaw quer dizer que a parte entrou sem advogado (Juizado): não é nome de
+    // advogado. Sem nenhum advogado nas outras fontes, a linha fica "Não" e "sem advogado (atermação)" (27/11/2026).
+    const fontes = []; const advs = []; let semAdvogado = '';
+    const add = (x, fonte) => { if (!x?.nome) return; if (SEM_ADVOGADO.test(normNome(x.nome))) { semAdvogado ||= fonte; return; } const k = normNome(x.nome); const ja = advs.find((y) => normNome(y.nome) === k); if (ja) { for (const o of x.oabs || []) if (!ja.oabs.some((p) => p.uf === o.uf && p.numero === o.numero)) ja.oabs.push(o); } else advs.push({ nome: x.nome.trim(), oabs: [...(x.oabs || [])] }); if (!fontes.includes(fonte)) fontes.push(fonte); };
     if (l.advogados?.elaw) add(l.advogados.elaw, 'eLaw (Advogado Adverso)');
     for (const x of l.advogados?.cabecalho || []) add(x, 'cabeçalho da decisão');
     for (const x of ia.advogados_parte_autora || []) add({ nome: x.nome, oabs: extrairOABs(x.oab) }, 'leitura da decisão pela IA');
-    const comp = comparar(advs, lista);
-    set(C.monitorado, comp.resultado);
-    set(C.advAutora, advs.map(fmtAdv).join('; '));
-    set(A['Advogado · fonte'], [fontes.join(' + '), comp.via && `comparado por ${comp.via}`, comp.detalhe && `lista: ${comp.detalhe}`].filter(Boolean).join(' · '));
-    if (comp.obs) obs.push(comp.obs);
-    if (comp.resultado === 'Sim') cont.monitorado++;
-    if (!advs.length) cont.advNaoIdentificado++;
+    if (!advs.length && semAdvogado) {
+      set(C.monitorado, 'Não');
+      set(C.advAutora, 'Sem advogado (atermação)');
+      set(A['Advogado · fonte'], `${semAdvogado}: atermação; a decisão não cita advogado da parte autora`);
+      cont.semAdvogado++;
+    } else {
+      const comp = comparar(advs, lista);
+      set(C.monitorado, comp.resultado);
+      set(C.advAutora, advs.map(fmtAdv).join('; '));
+      set(A['Advogado · fonte'], [fontes.join(' + '), comp.via && `comparado por ${comp.via}`, comp.detalhe && `lista: ${comp.detalhe}`].filter(Boolean).join(' · '));
+      if (comp.obs) obs.push(comp.obs);
+      if (semAdvogado) obs.push('o eLaw indica atermação, mas a decisão cita advogado da parte autora');
+      if (comp.resultado === 'Sim') cont.monitorado++;
+      if (!advs.length) cont.advNaoIdentificado++;
+    }
     const pastaDocs = l.documentos?.length ? path.dirname(path.join(lote, l.documentos[0].arquivo)) : '';
     set(A['Pasta do processo'], pastaDocs ? `${pastaDocs} (${l.documentos.length} documento(s))` : 'nenhum documento na PA');
     const precisaConferir = obs.some((o) => /conferir|d[uú]vida|sem trecho|sem resposta|só pelo dispositivo|conflito|sem sugest|saiu da An/i.test(o));
@@ -169,7 +181,7 @@ async function montar(celula) {
     ['Documentos baixados', cont.documentos], ['Analisadas só pelo dispositivo (sem inteiro teor no eLaw)', cont.soDispositivo],
     ['Litigância de má-fé = Sim (condenação expressa)', cont.maFe], ['Má-fé: só indícios ou menções (no detalhe)', cont.maFeIndicios], ['Expedição de ofício = Sim', cont.oficio],
     ['Sentença justa = Justa', cont.justa], ['Sentença justa = Injusta', cont.injusta], ['Sentença justa em branco (conferir)', cont.justaBranco],
-    ['Advogado monitorado = Sim', cont.monitorado], ['Advogado da parte autora não identificado', cont.advNaoIdentificado],
+    ['Advogado monitorado = Sim', cont.monitorado], ['Parte autora sem advogado (atermação)', cont.semAdvogado], ['Advogado da parte autora não identificado', cont.advNaoIdentificado],
     ['Linhas para conferir', cont.conferir], [],
     ['Ocorrências', ''], ['Linha', 'Processo', 'O que aconteceu', 'O que o robô fez'],
     ...(ocorrencias.length ? ocorrencias : [['—', '', 'nenhuma', '']]), [],
