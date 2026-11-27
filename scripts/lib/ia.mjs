@@ -35,6 +35,15 @@ export function lerItem(item, tipo) {
       partesDetalhe.push(`${i.tipo || 'indício'}${i.quem ? ` (${i.quem})` : ''}, p. ${String(i.pagina ?? '?').trim() || '?'}: "${t}"`);
     }
   }
+  // Ofício (validação de 26/11/2026): comunicação de custas à Procuradoria (Cadin, dívida ativa) não conta como
+  // ofício; o trecho fica só no detalhe, para a equipe ver o que foi desconsiderado.
+  if (tipo === 'ofício' && Array.isArray(item.desconsiderados)) {
+    for (const i of item.desconsiderados) {
+      const t = String(i?.trecho ?? '').trim();
+      if (!t) continue;
+      partesDetalhe.push(`não conta como ofício (regra do escritório): ${i.tipo || 'custas à Procuradoria'}, p. ${String(i.pagina ?? '?').trim() || '?'}: "${t}"`);
+    }
+  }
   let conferir = '';
   if (r === 'SIM' && !temTrecho) conferir = `${tipo}: "Sim" sem trecho da decisão`;
   else if (duvida) conferir = `${tipo}: dúvida da IA`;

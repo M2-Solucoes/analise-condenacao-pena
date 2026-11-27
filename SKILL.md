@@ -16,7 +16,7 @@ Colunas que o relatório traz vazias e o robô preenche:
 
 Junto vão colunas de apoio (trecho, página, sugestão, recurso, fonte do advogado, situação), uma aba **Resumo** e uma pasta por processo com os documentos da PA.
 
-O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A versão em vigor é a **v1.2**, de 12/11/2026: uma planilha por célula e o controle de carga (página 14 do escopo). A v1.0 e a v1.1, ambas de 11/11/2026, ficaram guardadas com o sufixo da versão. A proposta comercial está na mesma pasta. Se o escritório mudar uma regra, ajuste aqui, nos scripts e no escopo.
+O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-analise-condenacao/`. A versão em vigor é a **v1.2**, de 12/11/2026: uma planilha por célula e o controle de carga (página 14 do escopo). O escritório a **validou em 26/11/2026**, com duas definições: a comunicação de custas à Procuradoria (Cadin) não conta como ofício, e a produção roda a base toda, sem o limite de 20 linhas. A v1.0 e a v1.1, ambas de 11/11/2026, ficaram guardadas com o sufixo da versão. A proposta comercial está na mesma pasta. Se o escritório mudar uma regra, ajuste aqui, nos scripts e no escopo.
 
 ## Regras fixas
 
@@ -28,7 +28,8 @@ O escopo é `~/Projetos Claude/m2-digital-brand/proposal-template/pena-robo-anal
 - **Sem invenção.** Campo sem fonte fica vazio, com o motivo em Observações.
 - **Controle de carga: uma PA aparece uma vez só.** Toda PA que sai numa planilha é registrada em `…/_historico.json` com a data. Se ela continuar em Análise de Recurso nos dias seguintes, não aparece de novo. Só entra na planilha (e no controle) a linha analisada de ponta a ponta, coletada no eLaw e lida pela IA. Linha com falha, não coletada ou sem leitura da IA fica fora, vai para as ocorrências do Resumo e volta na próxima execução. Rodar de novo o mesmo lote no mesmo dia mantém as PAs dele. Nunca apague nem edite o `_historico.json` à mão.
 - **Dados fora do vault.** Lotes, PDFs e planilhas ficam em `~/Projetos Claude/Análise de Condenações/<AAAA-MM-DD>/` (ou na pasta que o escritório indicar), nunca no Segundo Cérebro nem no repositório da skill.
-- **Primeira execução em produção: no máximo 20 linhas**, conferidas pela equipe (`coletar.mjs --limite 20`).
+- **Produção sem limite de linhas.** Desde a primeira execução, o robô roda a base toda, isto é, todas as PAs em Análise de Recurso que nunca saíram numa planilha (validação de 26/11/2026). O `coletar.mjs --limite N` fica só para testes.
+- **Histórico de testes não entra na produção.** Se a pasta dos lotes tiver um `_historico.json` de testes, renomeie-o para `_historico-testes-<data>.json` antes da primeira execução em produção. Sem isso, as PAs dos testes ficariam de fora.
 
 ## Pré-requisitos
 
@@ -131,7 +132,7 @@ Cada uma tem só as PAs analisadas da célula e uma aba Resumo própria. O Resum
 | sem registro | diferente de Sim | em branco, conferir |
 
 - **Má-fé:** "Sim" só com condenação expressa. Indícios, advertências, menções e pedidos rejeitados aparecem só em "Má-fé · detalhe".
-- **Ofício:** "Sim" sem trecho, ou com justificativa "DÚVIDA:", vai para conferir.
+- **Ofício:** "Sim" sem trecho, ou com justificativa "DÚVIDA:", vai para conferir. A comunicação de custas em aberto à Procuradoria (Cadin, dívida ativa) conta como **Não** (validação de 26/11/2026); o trecho aparece em "Ofício · detalhe" como "não conta como ofício".
 - **Advogado monitorado:**
   - O robô junta os advogados do eLaw, do cabeçalho e da IA.
   - Compara primeiro a OAB e depois o nome completo. Nome de uma palavra só não é comparado.

@@ -1,4 +1,4 @@
-# Prompts da análise (escopo v1.1, 11/11/2026) e formato da resposta
+# Prompts da análise (escopo v1.2, validado pelo escritório em 26/11/2026) e formato da resposta
 
 Cada subagente recebe uma lista de linhas. Para cada linha `<n>`:
 
@@ -42,9 +42,12 @@ Você vai ler uma sentença de um processo em que a Vivo (Telefônica Brasil S.A
 - não há ordem de ofício;
 - o pedido de expedição de ofício foi indeferido;
 - o ofício é citado só como fato passado (por exemplo, "o ofício juntado aos autos"), sem nova ordem;
-- a comunicação é interna do processo: intimação ou citação das partes, remessa à contadoria, à secretaria ou à instância superior.
+- a comunicação é interna do processo: intimação ou citação das partes, remessa à contadoria, à secretaria ou à instância superior;
+- a comunicação é **cobrança de custas ou despesas processuais**: comunicar custas em aberto à Procuradoria (Procuradoria-Geral do Estado, Advocacia-Geral do Estado, Fazenda Pública), inscrever em dívida ativa ou no Cadin. O escritório definiu, em 26/11/2026, que isso **não conta como ofício**. Registre o trecho em `desconsiderados`.
 
-**Regras:** use apenas o que está escrito no documento. Copie o trecho exatamente como está, sem resumir. Na dúvida entre SIM e NÃO, responda SIM e comece a justificativa com "DÚVIDA:".
+Se a decisão tiver uma comunicação de custas e também uma ordem de ofício de verdade, responda SIM com base na ordem de ofício e registre a de custas em `desconsiderados`.
+
+**Regras:** use apenas o que está escrito no documento. Copie o trecho exatamente como está, sem resumir. Na dúvida entre SIM e NÃO, responda SIM e comece a justificativa com "DÚVIDA:". A comunicação de custas à Procuradoria não é dúvida: é NÃO.
 
 ---
 
@@ -69,7 +72,10 @@ Você vai ler uma sentença de um processo em que a Vivo (Telefônica Brasil S.A
     "finalidade": "em poucas palavras, ou não se aplica",
     "trecho": "não se aplica",
     "pagina": "não se aplica",
-    "justificativa": "uma frase"
+    "justificativa": "uma frase",
+    "desconsiderados": [
+      { "tipo": "custas à Procuradoria (Cadin)", "trecho": "cópia literal, até 300 caracteres", "pagina": "3" }
+    ]
   },
   "advogados_parte_autora": [
     { "nome": "NOME COMO APARECE NO DOCUMENTO", "oab": "OAB/MG 123.456 ou vazio" }
@@ -79,5 +85,6 @@ Você vai ler uma sentença de um processo em que a Vivo (Telefônica Brasil S.A
 
 - `resposta`: exatamente `SIM` ou `NÃO`. Em `ma_fe`, `SIM` só com condenação expressa.
 - `ma_fe.indicios`: use `[]` quando não houver nada a registrar. Nunca ponha a condenação expressa aqui; ela vai em `trecho`.
+- `oficio.desconsiderados`: comunicações que o escritório decidiu não contar como ofício (hoje, só custas em aberto à Procuradoria, dívida ativa ou Cadin). Use `[]` quando não houver.
 - `pagina`: o número que vem depois de `=== PÁGINA` no texto.
 - `advogados_parte_autora`: use `[]` quando o documento não disser quem é o advogado.
